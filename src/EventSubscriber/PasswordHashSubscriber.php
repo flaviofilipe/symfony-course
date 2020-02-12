@@ -8,6 +8,7 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
+use Symfony\Component\HttpKernel\Event\ViewEvent;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
 class PasswordHashSubscriber implements EventSubscriberInterface
@@ -29,12 +30,13 @@ class PasswordHashSubscriber implements EventSubscriberInterface
         ];
     }
 
-    public function hashPassword(GetResponseForControllerResultEvent $event)
+    // public function hashPassword(GetResponseForControllerResultEvent $event) Deprecied
+    public function hashPassword(ViewEvent $event)
     {
-        $user = $event->getControllerDefault();
+        $user = $event->getControllerResult();
         $method = $event->getRequest()->getMethod();
 
-        if ($user instanceof User || Request::METHOD_POST !== $method) {
+        if (!$user instanceof User || Request::METHOD_POST !== $method) {
             return;
         }
 
