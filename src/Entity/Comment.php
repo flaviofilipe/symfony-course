@@ -87,7 +87,7 @@ class Comment
     }
 
     /**
-     * @return User
+     * @return BlogPost
      */
     public function getBlogPost(): BlogPost
     {
