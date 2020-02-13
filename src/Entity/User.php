@@ -13,35 +13,33 @@ use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * @ApiResource(
- *     normalizationContext={"groups"={"get"}},
- *  itemOperations={
- *     "get"={
- *          "access_control"="is_granted('IS_AUTHENTICATED_FULLY')",
- *          "normalization_context"={
- *              "groups"={"get"}
- *          }
- *      },
- *     "put"={
- *          "access_control"="is_granted('IS_AUTHENTICATED_FULLY') and object == user",
- *           "denormalization_context"={
- *              "groups"={"put"}
- *           },
- *          "normalization_context"={
- *              "groups"={"get"}
- *          }
- *     }
- *  },
- *  collectionOperations={
- *     "post"={
- *          "denormalization_context"={
- *              "groups"={"post"}
- *          },
- *          "normalization_context"={
- *              "groups"={"get"}
- *          }
- *     }
- *  },
- *
+ *     itemOperations={
+ *         "get"={
+ *             "access_control"="is_granted('IS_AUTHENTICATED_FULLY')",
+ *             "normalization_context"={
+ *                 "groups"={"get"}
+ *             }
+ *         },
+ *         "put"={
+ *             "access_control"="is_granted('IS_AUTHENTICATED_FULLY') and object == user",
+ *             "denormalization_context"={
+ *                 "groups"={"put"}
+ *             },
+ *             "normalization_context"={
+ *                 "groups"={"get"}
+ *             }
+ *         }
+ *     },
+ *     collectionOperations={
+ *         "post"={
+ *             "denormalization_context"={
+ *                 "groups"={"post"}
+ *             },
+ *             "normalization_context"={
+ *                 "groups"={"get"}
+ *             }
+ *         }
+ *     },
  * )
  * @ORM\Entity(repositoryClass="App\Repository\UserRepository")
  * @UniqueEntity("username")
@@ -49,6 +47,13 @@ use Symfony\Component\Validator\Constraints as Assert;
  */
 class User implements UserInterface
 {
+    const ROLE_COMMENTATOR = 'ROLE_COMMENTATOR';
+    const ROLE_WRITER = 'ROLE_WRITER';
+    const ROLE_EDITOR = 'ROLE_EDITOR';
+    const ROLE_ADMIN = 'ROLE_ADMIN';
+    const ROLE_SUPERADMIN = 'ROLE_SUPERADMIN';
+
+    const DEFAULT_ROLES = [self::ROLE_COMMENTATOR];
     /**
      * @ORM\Id()
      * @ORM\GeneratedValue()
@@ -59,7 +64,7 @@ class User implements UserInterface
 
     /**
      * @ORM\Column(type="string", length=255)
-     * @Groups({"get", "post"})
+     * @Groups({"get", "post", "get-comment-with-author"})
      * @Assert\NotBlank()
      * @Assert\Length(min=6, max=255)
      */
@@ -68,28 +73,27 @@ class User implements UserInterface
     /**
      * @ORM\Column(type="string", length=255)
      * @Groups({"put", "post"})
-
      * @Assert\NotBlank()
      * @Assert\Regex(
-     *      pattern="/(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9]).{7,}/",
-     *      message="A senha precisa conter pelo menos 7 digitos, letras maiusculas e minusculas e um número"
+     *     pattern="/(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9]).{7,}/",
+     *     message="Password must be seven characters long and contain at least one digit, one upper case letter and one lower case letter"
      * )
      */
     private $password;
 
     /**
-     * @Assert\NotBlank()
      * @Groups({"put", "post"})
+     * @Assert\NotBlank()
      * @Assert\Expression(
-     *      "this.getPassword() === this.getRetypedPassword()",
-     *      message="Password does not match"
+     *     "this.getPassword() === this.getRetypedPassword()",
+     *     message="Passwords does not match"
      * )
      */
     private $retypedPassword;
 
     /**
      * @ORM\Column(type="string", length=255)
-     * @Groups({"get", "post", "put"})
+     * @Groups({"get", "post", "put", "get-comment-with-author"})
      * @Assert\NotBlank()
      * @Assert\Length(min=5, max=255)
      */
@@ -98,6 +102,7 @@ class User implements UserInterface
     /**
      * @ORM\Column(type="string", length=255)
      * @Groups({"post", "put"})
+     * @Assert\NotBlank()
      * @Assert\Email()
      * @Assert\Length(min=6, max=255)
      */
@@ -105,25 +110,29 @@ class User implements UserInterface
 
     /**
      * @ORM\OneToMany(targetEntity="App\Entity\BlogPost", mappedBy="author")
-     * @ORM\JoinColumn(nullable=false)
      * @Groups({"get"})
      */
     private $posts;
 
     /**
      * @ORM\OneToMany(targetEntity="App\Entity\Comment", mappedBy="author")
-     * @ORM\JoinColumn(nullable=false)
      * @Groups({"get"})
      */
     private $comments;
+
+    /**
+     * @ORM\Column(type="simple_array", length=200)
+     */
+    private $roles;
 
     public function __construct()
     {
         $this->posts = new ArrayCollection();
         $this->comments = new ArrayCollection();
+        $this->role = self::DEFAULT_ROLES;
     }
 
-    public function getId(): ?int
+    public function getId()
     {
         return $this->id;
     }
@@ -192,49 +201,27 @@ class User implements UserInterface
         return $this->comments;
     }
 
-    /**
-     * Returns the roles granted to the user.
-     *
-     *     public function getRoles()
-     *     {
-     *         return ['ROLE_USER'];
-     *     }
-     *
-     * Alternatively, the roles might be stored on a ``roles`` property,
-     * and populated in any number of different ways when the user object
-     * is created.
-     *
-     * @return string[] The user roles
-     */
-    public function getRoles()
+    public function getRoles(): array
     {
-        return ['ROLES'];
+        return $this->roles;
     }
 
-    /**
-     * Returns the salt that was originally used to encode the password.
-     *
-     * This can return null if the password was not encoded using a salt.
-     *
-     * @return string|null The salt
-     */
+    public function setRoles(array $roles)
+    {
+        $this->roles = $roles;
+    }
+
     public function getSalt()
     {
         return null;
     }
 
-    /**
-     * Removes sensitive data from the user.
-     *
-     * This is important if, at any given point, sensitive information like
-     * the plain-text password is stored on this object.
-     */
     public function eraseCredentials()
     {
+
     }
 
-
-    public function getRetypedPassword(): ?string
+    public function getRetypedPassword()
     {
         return $this->retypedPassword;
     }
